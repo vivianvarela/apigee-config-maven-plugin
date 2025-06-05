@@ -1,9 +1,17 @@
 [
     {
-        "attributes": [],
         "email": "hugh@example.com",
         "firstName": "Hugh",
         "lastName": "Jack",
-        "userName": "hughexample"
+        "userName": "hughexample",
+        "status": "inactive",
+        "developerId": "9d341886-64df-45a2-b781-a785c1fbf7e9"
+    },
+    {
+        "email": "shak@example.com",
+        "firstName": "Shakira",
+        "lastName": "Mebarak",
+        "userName": "shakira",
+        "status": "active"
     }
 ]

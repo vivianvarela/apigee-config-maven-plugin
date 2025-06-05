@@ -250,15 +250,33 @@ public class DeveloperMojo extends GatewayAbstractMojo
                                                         developerId,
                                                         developer);
         try {
-            
+            String payload = response.parseAsString();
             logger.info("Response " + response.getContentType() + "\n" +
-                                        response.parseAsString());
+                                        payload);
             if (response.isSuccessStatusCode())
-            	logger.info("Update Success.");
-
+            	logger.info("Update Success Test New Code 2.");
+            
+                logger.debug("output " + response.getContentType());
+            // response can be read only once
+            logger.info("Debug: Finished the updating of developer");
+            
+            JSONParser parser = new JSONParser();       
+            JSONObject devPayload     = (JSONObject)parser.parse(payload);
+            logger.info("This is the payload: " + payload + "\n" +  devPayload);
+            JSONObject devJson     = (JSONObject)parser.parse(developer);
+            logger.info("This is the json: " + devJson);
+            if (!devPayload.get("status").equals(devJson.get("status"))
+                )
+                {
+                   setDeveloperStatus(profile, (String) devPayload.get("developerId"), (String) devJson.get("status"));
+                }
+            
         } catch (HttpResponseException e) {
             logger.error("Developer update error " + e.getMessage());
             throw new IOException(e.getMessage());
+        } catch (ParseException pe){
+            logger.error("Get Developer parse error " + pe.getMessage());
+            throw new IOException(pe.getMessage());
         }
 
         return "";
@@ -285,6 +303,40 @@ public class DeveloperMojo extends GatewayAbstractMojo
 
         return "";
     }
+
+    public static String setDeveloperStatus(ServerProfile profile, 
+                                        String developerId,
+                                        String action)         
+        throws IOException {
+    	RestUtil restUtil = new RestUtil(profile);
+
+        logger.info("Setting developer status to: " + action);
+
+        HttpResponse response = restUtil.updateDeveloperStatus(profile, 
+                                                        "developers", 
+                                                        developerId,
+                                                        action);
+        logger.info("Response ", response);
+        try {
+            
+            logger.info("Response " + response.getContentType() + "\n" +
+                                        response.parseAsString());
+            if (response.isSuccessStatusCode())
+            	logger.info("Update Status.");
+            else {
+                String errorBody = response.parseAsString();
+                logger.error("Developer update failed with status code " + response.getStatusCode() + ": " + errorBody);
+                throw new IOException("Failed to update developer status. Status: " + response.getStatusCode() + ", Message: " + errorBody);
+            }
+
+        } catch (HttpResponseException e) {
+            logger.error("Developer update error " + e.getMessage(), e); 
+            throw new IOException("Developer update failed: " + e.getMessage(), e);
+        }
+
+        return "";
+    }
+
 
     public static List getDeveloper(ServerProfile profile)
             throws IOException {
