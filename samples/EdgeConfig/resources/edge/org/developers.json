@@ -1,15 +1,10 @@
 [
     {
+        "attributes": [],
         "email": "hugh@example.com",
         "firstName": "Hugh",
         "lastName": "Jack",
-        "userName": "hughexample"
-    },
-    {
-        "email": "shak@example.com",
-        "firstName": "Shakira",
-        "lastName": "Mebarak",
-        "userName": "shakira",
+        "userName": "hughexample",
         "status": "active"
     }
 ]
