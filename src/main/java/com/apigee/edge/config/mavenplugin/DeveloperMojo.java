@@ -20,6 +20,7 @@ import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.List;
 
+
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.maven.plugin.MojoExecutionException;
@@ -35,6 +36,8 @@ import com.google.api.client.http.HttpResponse;
 import com.google.api.client.http.HttpResponseException;
 import com.google.api.client.util.Key;
 import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonParser;
 import com.google.gson.JsonParseException;
 
 /**                                                                                                                                     ¡¡
@@ -250,27 +253,41 @@ public class DeveloperMojo extends GatewayAbstractMojo
                                                         developerId,
                                                         developer);
         try {
-            String payload = response.parseAsString();
-            logger.info("Response " + response.getContentType() + "\n" +
-                                        payload);
-            if (response.isSuccessStatusCode())
-            	logger.info("Update Success Test New Code 2.");
-            
-                logger.debug("output " + response.getContentType());
-            // response can be read only once
-            logger.info("Debug: Finished the updating of developer");
+            String initialUpdateResponsePayload = response.parseAsString();
+            //if (response.isSuccessStatusCode())
+            	//logger.info("Update Success.");
+                //logger.debug("output " + response.getContentType()); 
             
             JSONParser parser = new JSONParser();       
-            JSONObject devPayload     = (JSONObject)parser.parse(payload);
-            logger.info("This is the payload: " + payload + "\n" +  devPayload);
-            JSONObject devJson     = (JSONObject)parser.parse(developer);
-            logger.info("This is the json: " + devJson);
-            if (!devPayload.get("status").equals(devJson.get("status"))
-                )
-                {
-                   setDeveloperStatus(profile, (String) devPayload.get("developerId"), (String) devJson.get("status"));
+            JSONObject devPayloadFromServer = (JSONObject)parser.parse(initialUpdateResponsePayload);
+            JSONObject devJsonFromConfig    = (JSONObject)parser.parse(developer);
+
+            String finalPayloadToLog = initialUpdateResponsePayload; // Default to the initial response
+
+            Object statusFromServerObj = devPayloadFromServer.get("status");
+            Object statusFromConfigObj = devJsonFromConfig.get("status");
+
+            String statusFromServer = (statusFromServerObj == null) ? null : statusFromServerObj.toString();
+            String statusFromConfig = (statusFromConfigObj == null) ? null : statusFromConfigObj.toString();
+
+            // Check if status needs to be updated
+            if (statusFromConfig != null && !statusFromConfig.trim().isEmpty()) {
+                if (!statusFromConfig.equals(statusFromServer)) {
+                    logger.info("Developer " + developerId + ": status differs. Server: \"" + statusFromServer + "\", Config: \"" + statusFromConfig + "\". Updating status.");
+                    // setDeveloperStatus returns the response payload of the status update call
+                    /* String statusUpdateResponse = */ setDeveloperStatus(profile, (String) devPayloadFromServer.get("developerId"), (String) devJsonFromConfig.get("status"));
+                    // Update our local representation of the developer payload to reflect the change.
+                    devPayloadFromServer.put("status", statusFromConfig);
+                    finalPayloadToLog = new GsonBuilder().setPrettyPrinting().create().toJson(devPayloadFromServer);
+                } else {
+                    logger.info("Developer " + developerId + ": status in config matches server status (\"" + statusFromServer + "\"). No status change needed.");
                 }
-            
+            } else {
+                logger.warn("Developer " + developerId + ": 'status' field is missing, null, or empty in the configuration. Skipping status update. Current server status: \"" + statusFromServer + "\"");
+            }
+            logger.info("Response " + response.getContentType() + "\n" +
+                                        finalPayloadToLog);
+            logger.info("Update Success.");
         } catch (HttpResponseException e) {
             logger.error("Developer update error " + e.getMessage());
             throw new IOException(e.getMessage());
@@ -310,38 +327,37 @@ public class DeveloperMojo extends GatewayAbstractMojo
         throws IOException {
     	RestUtil restUtil = new RestUtil(profile);
 
-        logger.info("Setting developer status to: " + action);
+        
 
         HttpResponse response = restUtil.updateDeveloperStatus(profile, 
                                                         "developers", 
                                                         developerId,
                                                         action);
-        logger.info("Response ", response);
-        try {
-            
+       try {
+            String statusUpdateResponsePayload = response.parseAsString(); // Parse only once
+            logger.info("Setting developer status to: " + action);
             logger.info("Response " + response.getContentType() + "\n" +
-                                        response.parseAsString());
-            if (response.isSuccessStatusCode())
-            	logger.info("Update Status.");
-            else {
-                String errorBody = response.parseAsString();
-                logger.error("Developer update failed with status code " + response.getStatusCode() + ": " + errorBody);
-                throw new IOException("Failed to update developer status. Status: " + response.getStatusCode() + ", Message: " + errorBody);
+                                        statusUpdateResponsePayload); // Use parsed payload
+            if (response.isSuccessStatusCode()) {
+            	logger.info("Developer status successfully updated to: " + action);
+            } else {
+                // Use the already parsed payload for the error message
+                logger.error("Developer status update failed with status code " + response.getStatusCode() + ": " + statusUpdateResponsePayload);
+                throw new IOException("Failed to update developer status. Status: " + response.getStatusCode() + ", Message: " + statusUpdateResponsePayload);
             }
-
         } catch (HttpResponseException e) {
-            logger.error("Developer update error " + e.getMessage(), e); 
-            throw new IOException("Developer update failed: " + e.getMessage(), e);
+            logger.error("Developer status update error " + e.getMessage(), e); 
+            throw new IOException("Developer status update failed: " + e.getMessage(), e);
         }
-
-        return "";
+        // Return the response from the status update call
+        return ""; 
     }
 
 
     public static List getDeveloper(ServerProfile profile)
             throws IOException {
     	RestUtil restUtil = new RestUtil(profile);
-        HttpResponse response = restUtil.getOrgConfig(profile, "developers");
+        HttpResponse response = restUtil.getOrgConfig(profile, "developers"); // Fetches list of developers
         if(response == null) return new ArrayList();
         JSONArray developers = new JSONArray();
         try {
@@ -366,13 +382,33 @@ public class DeveloperMojo extends GatewayAbstractMojo
 
         return developers;
     }	
+
+    // Helper method to get the latest details of a specific developer
+    public static String getDeveloperDetails(ServerProfile profile, String developerEmail)
+            throws IOException {
+        RestUtil restUtil = new RestUtil(profile);
+        logger.info("Fetching details for developer - " + developerEmail);
+        HttpResponse response = restUtil.getOrgConfig(profile, "developers/" + URLEncoder.encode(developerEmail, "UTF-8"));
+        if (response == null) {
+            logger.warn("No response from server when fetching details for developer " + developerEmail);
+            return null; 
+        }
+        try {
+            String payload = response.parseAsString();
+            logger.debug("Developer details payload for " + developerEmail + ": " + payload);
+            return payload;
+        } catch (HttpResponseException e) {
+            logger.error("Get Developer details error for " + developerEmail + ": " + e.getMessage());
+            throw new IOException("Failed to get developer details for " + developerEmail + ": " + e.getMessage(), e);
+        }
+    }
     
     public static boolean doesDeveloperExist(ServerProfile profile, String developerEmail)
             throws IOException {
         try {
         	RestUtil restUtil = new RestUtil(profile);
         	logger.info("Checking if developer - " +developerEmail + " exist");
-            HttpResponse response = restUtil.getOrgConfig(profile, "developers/"+URLEncoder.encode(developerEmail, "UTF-8"));
+            HttpResponse response = restUtil.getOrgConfig(profile, "developers/" + URLEncoder.encode(developerEmail, "UTF-8"));
             if(response == null) 
             	return false;
         } catch (HttpResponseException e) {
@@ -382,7 +418,3 @@ public class DeveloperMojo extends GatewayAbstractMojo
         return true;
     }	
 }
-
-
-
-

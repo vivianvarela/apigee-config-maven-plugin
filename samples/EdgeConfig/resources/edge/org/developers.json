@@ -3,9 +3,7 @@
         "email": "hugh@example.com",
         "firstName": "Hugh",
         "lastName": "Jack",
-        "userName": "hughexample",
-        "status": "inactive",
-        "developerId": "9d341886-64df-45a2-b781-a785c1fbf7e9"
+        "userName": "hughexample"
     },
     {
         "email": "shak@example.com",
